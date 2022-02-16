@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>pdf js</title>
+    <style>
+        body {
+            background: #c5ffde;
+        }
+        canvas {
+            background: white;
+            display: block;
+            margin: 0;
+            border: 5px solid goldenrod;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
+</head>
+<body>
+    <h1>pdf js learning</h1>
+    <input type="file" accept=".pdf" id="input-document">
+    <!-- <canvas width="900" height="1200" id="canvas"></canvas> -->
+    <canvas width="900" height="1200" id="canvas-2"></canvas>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.9.359/build/pdf.worker.min.js";
+        /*let inputElement = document.getElementById('input-document');
+        
+        inputElement.onchange = function(event) {
+
+            //It is important that you use the file and not the filepath (The file path won't work because of security issues)
+            var file = event.target.files[0];
+
+            var fileReader = new FileReader();  
+
+            fileReader.onload = function() {
+
+                var typedarray = new Uint8Array(this.result);
+
+                //replaced the old function with the new api
+                const loadingTask = pdfjsLib.getDocument(typedarray);
+                    loadingTask.promise.then(pdf => {
+                        console.log(pdf._pdfInfo.numPages)
+                    });
+
+            };
+            //Step 3:Read the file as ArrayBuffer
+            fileReader.readAsArrayBuffer(file);
+
+        }*/
+        /*let inputElement = document.getElementById('input-document');
+        inputElement.addEventListener('change', () => {handleFiles(inputElement.files)})
+        
+        function handleFiles(files) {
+            let fileReader = new FileReader();
+            fileReader.onload = function() {
+                let typedarray = new Uint8Array(fileReader.result);
+                pdfjsLib.getDocument(typedarray).promise.then(displayPdf);
+                // doc.promise.then(pdf => {
+                //     console.log(`This doc has ${pdf.numPages}`)
+                // }).catch(error => {
+                //     console.log('error!: ', error.message)
+                // })
+            }
+            fileReader.readAsArrayBuffer(files[0]);
+        }
+        function displayPdf(pdf) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            pdf.getPage(1).then(page => {
+                var scale = 1.5;
+                var viewport = page.getViewport({scale});
+
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                var renderContext = {
+                    canvasContext: context,
+                    viewport: viewport
+                };
+                page.render(renderContext).promise.then(() => {
+                    console.log('page rendered')
+                });
+                document.body.appendChild(canvas);
+            })
+            
+        }*/
+        let inputElement = document.getElementById('input-document');
+        // let canvas = document.createElement('canvas');
+        // let ctx = canvas.getContext('2d');
+        let canvas2 = document.getElementById('canvas-2');
+        let ctx2 = canvas2.getContext('2d');
+
+        inputElement.addEventListener('change', (e) => {handleFile(inputElement.files[0])});
+        
+        let pages = [];
+        let croppedPages = [];
+        // Question beginning markers
+        let dot = {},
+            parenthesis = {},
+            questionBox = [],
+            questions;
+
+        function handleFile(file) {
+            const canvas = document.createElement('canvas');
+            const context =  canvas.getContext('2d');
+            let currentPage = 1;
+            let fileReader = new FileReader();
+            pages = [];
+            croppedPages = [];
+            dot = {};
+            parenthesis = {};
+            questionBox = [];
+            questions = null;
+
+            fileReader.onload = function() {
+                let typedarray = new Uint8Array(fileReader.result);
+                pdfjsLib.getDocument(typedarray).promise.then(iterate);
+
+                function iterate(pdf) {
+                    let questionObject = {};
+                    let previousPageNumber = 1;
+                    let newPageStarted = false;
+                    let previousMatch = {};
+                    if (currentPage < pdf.numPages) {getPage()};
+                    function getPage() {
+                        pdf.getPage(currentPage).then(page => {
+                            let scale = 1.5;
+                            let viewport = page.getViewport({scale});
+                            canvas.height = viewport.height;
+                            canvas.width = viewport.width;
+                            let reanderContext = {
+                                viewport: viewport,
+                                canvasContext: context
+                            }
+                            page.getTextContent().then(content => {
+                                // console.log('current page: ', currentPage)
+                                // console.log('content: ', content)
+                                let newQuestionStarted;
+                                let concatLine = '';
+                                let resetConcatLine = false;
+                                let lineCounter = 0;
+                                let yEndLine = 0;
+                                let cleanArray = cleanInputPageArray(content.items, viewport);
+                                for (let i = 0; i < cleanArray.length; i++) {
+                                    let item = cleanArray[i];
+                                    // if (item.str.length <= 1) {continue}
+                                    var tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+                                    // avoiding tx * [0,0,1] taking x, y directly from the transform
+                                    // xs.push(tx[4]); ys.push(tx[5]);
+                                    // console.log('height: ', item.height)
+                                    let markerType = getQuestionBeginningMarker(item.str.substring(0, 4));
+                                    if (markerType) {
+                                        newQuestionStarted = true;
+                                    } else {
+                                        newQuestionStarted = false;
+                                    }
+                                    // console.log('marker type: ', markerType);
+                                    // console.log('current page number: ', currentPage)
+                                    // console.log('previous page number: ', previousPageNumber)
+                                    if (previousPageNumber != currentPage) {
+                                        newPageStarted = true;
+                                        previousPageNumber = currentPage;
+                                    } else {
+                                        newPageStarted = false;
+                                    }
+                                    // console.log('(i === (cleanArray.length - 1) ): ', (i === (cleanArray.length - 1) ));
+                                    // console.log('text:  ', item.str)
+                                    // console.log('ty: ', tx[5])
+                                    
+                                    
+                                    if (newQuestionStarted && questionObject) {
+                                        // console.log('new page: ', newPageStarted)
+                                        // console.log('question object: ', questionObject);
+                                        // console.log('line counter: ', lineCounter)
+                                        questionObject.lineCounter = lineCounter;
+                                        pushQuestionToBox(questionObject, previousMatch, tx, yEndLine);
+
+                                        questionObject = {
+                                            start1: {x: tx[4], y: tx[5]},
+                                            height: item.height,
+                                            value: item.str,
+                                            page: currentPage,
+                                            questionBeginningMarker: markerType
+                                        };
+                                        lineCounter = 1;
+                                        yEndLine= tx[5];
+                                        // console.log('dots: ', )
+                                    } else if (questionObject.value) {
+                                        questionObject.value = questionObject.value + item.str;
+                                        // console.log('line: ', item.str);
+                                        // console.log('line length: ', item.str.length)
+                                        if (item.str.length > 1) {
+                                            lineCounter = lineCounter + 1;
+                                        } 
+                                        if (yEndLine < tx[5]) {
+                                            yEndLine = tx[5];
+                                        }
+                                        
+                                    }
+
+                                    // console.log('text: ', item.str)
+                                    // console.log('items length: ', cleanArray.length - 1);
+                                    // console.log('i: ', i)
+                                    // console.log('newQuestionStarted: ', newQuestionStarted)
+                                    // console.log('tx[5] ', tx[5]);
+                                    // console.log('y end line: ', yEndLine);
+                                    // console.log('text: ', item.str)
+                                    if (  (i === (cleanArray.length - 1) ) && questionObject ) {
+                                        
+                                        if (!questionObject.start2 && questionObject.start1) {
+                                            // console.log('y end line: ', yEndLine);
+                                            // questionObject.end1 = {x: tx[4], y: yEndLine};
+                                            // console.log('y end line in qObject: ', questionObject.end1.y)
+                                        } else if (questionObject.start2) {
+                                            // questionObject.end2 = {x: tx[4], y: yEndLine};
+                                        }
+                                        // console.log('lineCounter: ', lineCounter);
+                                        // console.log('questionObject: ', questionObject)
+                                        if (currentPage === pdf.numPages) {
+                                            questionObject.lineCounter = lineCounter;
+                                        }
+                                        pushQuestionToBox(questionObject, previousMatch, tx, yEndLine);
+                                    }
+                                    // if (i === (cleanArray.length - 1) ) {
+                                    //     questionObject.end1 = {x: tx[4], y: tx[5]};
+                                    //     if ( currentPage < (pdf.numPages - 1) ) {
+
+                                    //     }
+                                        
+                                    // }
+                                    // console.log('page no.: ', currentPage)
+                                    
+
+                                    
+
+                                    if (!newQuestionStarted && newPageStarted && questionObject && (item.str.length > 1) ) {
+                                        if (previousMatch.questionBeginningMarker === 'parenthesis') {
+                                            let questionArray = parenthesis[previousMatch.key];
+                                            let lastQuestionObject = questionArray[questionArray.length - 1];
+                                            lastQuestionObject.start2 = {x: tx[4], y: tx[5]};
+                                            questionArray.pop();
+                                            questionObject = lastQuestionObject;
+                                            parenthesis[previousMatch.key] = questionArray;
+                                        } else if (previousMatch.questionBeginningMarker === 'dot') {
+                                            let questionArray = dot[previousMatch.key];
+                                            let lastQuestionObject = questionArray[questionArray.length - 1];
+                                            lastQuestionObject.start2 = {x: tx[4], y: tx[5]};
+                                            questionArray.pop();
+                                            questionObject = lastQuestionObject;
+                                            dot[previousMatch.key] = questionArray;
+                                        }
+                                        // questionObject.start2 = {x: tx[4], y: tx[5]};
+                                        // previousPageNumber = currentPage;
+                                    }
+                                    // console.log('new question started: ', newQuestionStarted);
+                                    // console.log('line counter: ', lineCounter);
+                                    // console.log('text: ', item.str);
+                                    
+                                    if (newPageStarted) {
+                                        // console.log('text: ', item.str)
+                                    }
+                                    // console.log('dot: ', dot['134.036-136.036'].length)
+                                    
+                                    // console.log('new page started: ', newPageStarted)
+                                    // console.log('questionObject: ', questionObject)
+                                }
+                                /*
+                                    x = 284.79
+                                    y = 193.89
+                                    width = 273.27252000000004
+                                    height = 
+                                */
+                               
+                            }).then(() => {
+                                page.render(reanderContext).promise.then(() => {
+                                    // document.body.appendChild(canvas)
+                                    pages.push(canvas.toDataURL());
+                                    // console.log('current page: ', currentPage);
+                                    if (currentPage < pdf.numPages) {
+                                        currentPage += 1;
+                                        getPage();
+                                    } else {
+                                        console.log('we are done');
+                                        filterQuestionBox(parenthesis);
+                                    
+                                        filterQuestionBox(dot);
+                                        console.log('parenthesis: ', parenthesis);
+                                        console.log('dot: ', dot);
+                                        getQuestionArrayFromBox(questionBox);
+                                        // console.log('questions: ', questions)
+                                        document.body.appendChild(canvas);
+                                        
+                                        cropPages(questions, pages)
+                                        .then((promises) => {
+                                            // console.log('promises: ', promises)
+                                            // console.log('questions[0].imgSrc1: ', questions[0].imgSrc1)
+                                            // console.log('questions: ', questions);
+                                            let promisesEntryIndex = 0;
+                                            questions.forEach((question, index) => {
+                                                question.imgSrc1 = promises[promisesEntryIndex].value;
+                                                promisesEntryIndex += 1;
+                                                if (question.start2) {
+                                                    question.imgSrc2 = promises[promisesEntryIndex].value;
+                                                    promisesEntryIndex += 1;
+                                                }
+                                            })
+                                            drawCroppedPage(questions[7].imgSrc1);
+                                            // console.log('imgScr2: ', questions[46].imgSrc2)
+
+                                            // console.log('question : ', questions[]);
+                                            // console.log('questions: ', questions);
+                                            // console.log('questions 2 text string: ', questions[7].value.replace(/\s{2,}/g, ' '))
+                                            // trying to fetch a string
+                                            let searchTerm = '8. Calculate the solubility of ';
+                                            wikiSearch(questions);
+                                        });
+                                        
+                                        
+                                        
+                                        // cropPage(pages[0],108.036, 176.78999999999996, 600, 200);
+                                        // drawPage(0, croppedPages);
+                                        // console.log('cropped pages: ', croppedPages)
+                                    }
+                                })
+                            })
+                            
+                            // let tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+                            // console.log('tx: ', tx);
+                                
+                            
+                        })
+                    }
+                    // console.log('')
+                }
+
+                function wikiSearch(searchArray) {
+                    let i = 0;
+                    let maxChars = 100;
+                    console.log('starting wiki search...')
+                    search('Which of'.replace(/\s{2,}/g, ' ').substring(0, 100));
+                    function search(searchTerm) {
+                        fetch(`https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${searchTerm}&gsrlimit=20&prop=pageimages|extracts&exchars=${maxChars}&exintro&explaintext&exlimit=max&format=json&origin=*`)
+                        .then(response => response.json())
+                        .then(data => {
+                            i += 1;
+                            console.log('search term: ', searchTerm)
+                            // console.log('substring: ', searchArray[i].value.replace(/\s{2,}/g, ' ').substring(0, 100).length)
+                            console.log('wiki search data: ', data);
+                            if (searchArray[i]) {
+                                search(searchArray[i].value.replace(/\s{2,}/g, ' ').substring(0, 100))
+                            }
+                        })
+                    }
+                }
+
+                function pushQuestionToBox(questionObject, previousMatch, tx, yEndLine) {
+                    if (!questionObject.start2 && questionObject.start1) {
+                        questionObject.end1 = {x: tx[4], y: yEndLine};
+                    } else if (questionObject.start2) {
+                        questionObject.end2 = {x: tx[4], y: yEndLine};
+                    }
+                    
+                    if (questionObject.questionBeginningMarker === 'parenthesis') {
+                        let matchKeyFound = getMatchingKeyRange(questionObject.start1.x, parenthesis);
+                        
+                        if (matchKeyFound.state) {
+                            let questionArray = parenthesis[matchKeyFound.key];
+                            questionArray.push(questionObject);
+                            parenthesis[matchKeyFound.key] = questionArray;
+                            questionObject = {};
+                        } else {
+                            let questionArray = [];
+                            let xRange = `${Number(questionObject.start1.x) - 1}-${Number(questionObject.start1.x) + 1}`;
+                            questionArray.push(questionObject);
+                            parenthesis[xRange] = questionArray;
+                            questionObject = {};
+                        }
+                        previousMatch.key = matchKeyFound.key;
+                        previousMatch.questionBeginningMarker = 'parenthesis';
+
+                    } else if ( questionObject.questionBeginningMarker === 'dot' ) {
+                        let matchKeyFound = getMatchingKeyRange(questionObject.start1.x, dot);
+                        
+                        if (matchKeyFound.state) {
+                            let questionArray = dot[matchKeyFound.key];
+                            questionArray.push(questionObject);
+                            dot[matchKeyFound.key] = questionArray;
+                            questionObject = {};
+                        } else {
+                            let questionArray = [];
+                            let xRange = `${Number(questionObject.start1.x) - 1}-${Number(questionObject.start1.x) + 1}`;
+                            questionArray.push(questionObject);
+                            dot[xRange] = questionArray;
+                            questionObject = {};
+                        }
+                        previousMatch.key = matchKeyFound.key;
+                        previousMatch.questionBeginningMarker = 'dot';
+                    }
+                }
+
+                function cleanInputPageArray(questionArray, viewport) {
+                    let lineObject,
+                        concatLine,
+                        resultArray = [];
+                    // console.log('question array: ', questionArray)
+                    for (let i = 0; i < questionArray.length; i++) {
+                        let tx = pdfjsLib.Util.transform(viewport.transform, questionArray[i].transform);
+                        if (i === 0) {
+                            // console.log('line object: ', lineObject)
+                            lineObject = questionArray[i];
+                            concatLine = lineObject.str;
+                        }
+                        // console.log('line object: ', lineObject)
+                        if ((i != (questionArray.length - 1) ) && (i > 0)) {
+                            let nextTx = pdfjsLib.Util.transform(viewport.transform, questionArray[i + 1].transform);
+                            let previousTx = pdfjsLib.Util.transform(viewport.transform, questionArray[i - 1].transform);
+                            if (previousTx[5] === tx[5]) {
+                                concatLine = concatLine +  questionArray[i].str;
+                            } else {
+                                lineObject.str = concatLine.trim();
+                                resultArray.push(lineObject);
+                                lineObject = questionArray[i];
+                                concatLine = questionArray[i].str;
+                            };
+                        } else if (i === (questionArray.length - 1)) {
+                            let previousTx = pdfjsLib.Util.transform(viewport.transform, questionArray[i - 1].transform);
+                            if (previousTx[5] === tx[5]) {
+                                concatLine = concatLine +  questionArray[i].str;
+                            }
+                            lineObject.str = concatLine.trim();
+                            resultArray.push(lineObject);
+                            lineObject = null;
+                            concatLine = '';
+                        }
+
+                    }
+                    return resultArray;
+                }
+
+                function filterQuestionBox(box) {
+                    let questionArrays = {};
+                    let averageNumberOfLines = 0;
+                    for (const [, questionArray] of Object.entries(box)) {
+                        loop(questionArray, 0);
+                    }
+
+                    function getQuestionNumber(qObject) {
+                        if (!qObject.value && !qObject.questionBeginningMarker) {return};
+                        let questionSubstring = qObject.value.substring(0, 5);
+                        let indexOfMarker;
+                        if (qObject.questionBeginningMarker === 'parenthesis') {
+                            indexOfMarker = questionSubstring.indexOf(')');
+                        } else {
+                            indexOfMarker = questionSubstring.indexOf('.');
+                        }
+                        return Number(questionSubstring.substring(0, indexOfMarker).trim());
+                    }
+
+
+                    function loop(qArray = [], index = 0) {
+                         let questionArray = [];
+                         let counter = 0;
+                         let cachedIndex = null;
+                        //lineCounter
+                        //  console.log('qArray: ', qArray);
+                        //  console.log('qArray length: ', qArray.length)
+                        for (let i = index; i < qArray.length; i++) {
+                            let questionNumber = getQuestionNumber(qArray[i]);
+                            // console.log('qArray[i]: ' , qArray[i])
+                            // console.log('i: ', i)
+                            // console.log('question number: ', questionNumber)
+                            if (questionNumber === 1) {
+                                // console.log('question 1: ', qArray[i])
+                                if (questionArray.length === 0) {
+                                    questionArray.push(qArray[i]);
+                                    averageNumberOfLines = qArray[i].lineCounter;
+                                } else {
+                                    if ((counter > 4) || (i === (qArray.length - 1))) {
+                                        questionArrays[averageNumberOfLines] = {averageNumberOfLines: averageNumberOfLines, value: questionArray};
+                                        averageNumberOfLines = 0;
+                                        questionArray = [];
+                                        questionArray.push(qArray[i]);
+                                        averageNumberOfLines = ((questionArray.length - 1) * averageNumberOfLines + qArray[i].lineCounter) / questionArray.length;
+                                        counter = 0;
+                                        
+                                    } else {
+                                        cachedIndex = i;
+                                    }
+                                }
+                            } else if (questionArray.length != 0) {
+                                
+                                let lastQuestionNumber = getQuestionNumber(questionArray[questionArray.length - 1]);
+                                if ( (lastQuestionNumber) === (questionNumber - 1)) {
+                                    questionArray.push(qArray[i]);
+                                    averageNumberOfLines = ((questionArray.length - 1) * averageNumberOfLines + qArray[i].lineCounter) / questionArray.length;
+                                    counter = 0;
+                                } else {
+                                    counter += 1;
+                                }
+                            }
+
+                            if ((counter > 4) && cachedIndex) {
+                                questionArrays[averageNumberOfLines] = {averageNumberOfLines: averageNumberOfLines, value: questionArray};
+                                averageNumberOfLines = 0;
+                                questionArray = [];
+                                break;
+                            }
+                            if ((i === (qArray.length - 1)) && (questionNumber != 1)) {
+                                questionArrays[averageNumberOfLines] = {averageNumberOfLines: averageNumberOfLines, value: questionArray};
+                                averageNumberOfLines = 0;
+                                questionArray = [];
+                            }
+                            // lineNumberCounter
+                            // console.log('text: ', qArray[i].value);
+                            // console.log('line counter: ', qArray[i].lineCounter);
+                            // console.log('averageNumberOfLines: ', averageNumberOfLines);
+                        }
+
+                        if ((counter > 4) && cachedIndex) {
+                            counter = 0;
+                            loop(qArray, cachedIndex);
+                            cachedIndex = null;
+                        }
+                        // console.log('questionArray: ', questionArray)
+                    }
+                    
+                    for (let [, questionArray] of Object.entries(questionArrays)) {
+                        if (Object.keys(questionArray).length != 0) {
+                            // console.log('question array: ', questionArray)
+                            questionBox.push(questionArray);
+                        }
+                    }
+                    // console.log('question arrays: ', questionArrays)
+                    // console.log('question box: ', questionBox)
+                }
+
+                function getQuestionArrayFromBox(questionBox) {
+                    let highestTotalNumberOfLines = 0,
+                        index,
+                        currentAverage;
+                    // console.log('get questions from box: ', questionBox)
+                    if (questionBox.length === 0) {return}
+
+                    for (let i = 0; i < questionBox.length; i++) {
+                        currentAverage = questionBox[i].averageNumberOfLines;
+                        // console.log('current average: ', currentAverage)
+                        if ( (currentAverage * questionBox[i].value.length) > highestTotalNumberOfLines) {
+                            index = i;
+                            highestTotalNumberOfLines = currentAverage * questionBox[i].value.length;
+                        }
+                    }
+                    questions = questionBox[index].value;
+                }
+                // console.log('question box: ', questionBox)
+                
+            }
+            fileReader.readAsArrayBuffer(file);
+        }
+
+        
+        /*
+            const item = textcleanArray[0];
+            const transform = item.transform;
+            const x = transform[4];
+            const y = transform[5];
+            const width = item.width;
+            const height = item.height;
+        */
+
+        // function convertToCanvasCoords([x, y, width, height]) {
+        //     const scale = 1.5;
+        //     return [x * scale, canvas.height - ((y + height) * scale), width * scale, height * scale];
+        // }
+
+
+        function drawPage(index, array) {
+            let img = new Image();
+            img.onload = function () {
+                ctx.fillStyle = 'white'
+                ctx.fillRect(0, 0, 900, 1200);
+                ctx.drawImage(img, 0, 0);
+            }
+            img.src = array[index];
+        }
+
+        function drawCroppedPage(pageSrc) {
+            let img = new Image();
+            img.onload = function () {
+                ctx2.fillStyle = 'white'
+                ctx2.fillRect(0, 0, 900, 1200);
+                ctx2.drawImage(img, 0, 0);
+            }
+            img.src = pageSrc;
+        }
+
+        function cropPage(src, x, y, width, height) {
+            let canvas = document.createElement('canvas');
+            canvas.width = 900;
+            canvas.height = 1200;
+            let ctx = canvas.getContext('2d');
+            let img = new Image();
+            
+            img.src = src;
+            return new Promise(resolve => {
+                img.addEventListener('load', function () {
+                    ctx.drawImage(img, x, y,
+                                        700, height, 
+                                        0, 0, 
+                                        700, height);
+                    resolve(canvas.toDataURL());
+                })
+            })
+        }
+
+        function cropPages(cropInfoArray, pages) {
+            let currentPage = 1;
+            let promises = [];
+                cropInfoArray.forEach((cropInfo, index) => {
+                    let xStartCoord = cropInfo.start1.x;
+                    let yStartCoord = cropInfo.start1.y - (cropInfo.height + 2);
+                    let previousYCoord = cropInfoArray[((index - 1) < 0) ? 0: (index - 1)].start1.y - (cropInfo.height + 2);
+                    let height = (cropInfo.end1.y - cropInfo.start1.y);
+                    let width = 750;
+                    // console.log('end1.y: ', cropInfo.end1.y);
+                    // console.log('start1.y: ', cropInfo.start1.y);
+                    // console.log('height: ', height)
+                    // console.log('value: ', cropInfo.value)
+
+                    if (cropInfo.end1.y < cropInfo.start1.y) {
+                        height = 100;
+                    }
+
+                    if (currentPage != cropInfo.page) {
+                        currentPage = cropInfo.page;
+                    }
+                    // console.log('cropinfo:', cropInfo)
+
+                    let promise = cropPage(pages[currentPage - 1], xStartCoord, yStartCoord, width, height + 15);
+                    promises.push(promise);
+
+                    
+                        if (cropInfo.start2) {
+                            // console.log('it has start 2: ', cropInfo)
+                            let xStartCoord2 = cropInfo.start2.x;
+                            let yStartCoord2 = cropInfo.start2.y - (cropInfo.height + 2);
+                            let height2 = cropInfo.end2.y - cropInfo.start2.y;
+
+                            if (cropInfo.end2.y < cropInfo.start2.y) {
+                                height2 = 100;
+                            }
+                            // console.log('xStartCoord2: ', xStartCoord2);
+                            // console.log('yStartCoord2: ', yStartCoord2);
+                            // console.log('height2: ', height2);
+                            // console.log('pages[currentPage - 1]: ', pages[currentPage - 1])
+
+                            // let promise2 = cropPage(pages[currentPage], xStartCoord2, yStartCoord2, width, height2);
+                            // promises.push(promise2);
+                            // promise2
+                            let promise2 = cropPage(pages[currentPage], xStartCoord2, yStartCoord2, width, height2 + 15);
+                            promises.push(promise2);
+                            // promise2.then(croppedPageSrc2 => {
+                            //     questions[index].imgSrc2 = croppedPageSrc2;
+                            //     // console.log('croppedPageSrc2: ', croppedPageSrc2)
+                            //     // if (index === (cropInfoArray.length - 1)) {resolve()}
+                            // })
+                        }
+                        // if (index === (cropInfoArray.length - 1)) {resolve()}
+                });
+                // console.log('promises: ', promises)
+                return Promise.allSettled(promises);
+            // console.log('questions: ', questions)
+        }
+
+        function getQuestionBeginningMarker(str) {
+            if (typeof str !== 'string') return;
+            let markerType;
+            for (let i = str.length - 1; i >= 0; i--) {
+                // console.log('char for that string: ', str[i]);
+                if (str[i] === ')') {
+                    // console.log('previous char: ', str[i - 1]);
+                    if ( !Object.is(Number(str[i - 1]), NaN) ) {
+                        markerType = 'parenthesis';
+                    };
+                    // console.log(str[i - 1])
+                } else if (str[i] === '.') {
+                    if ( !Object.is(Number(str[i - 1]), NaN) ) {
+                        markerType  = 'dot';
+                    };
+                }
+            }
+            return markerType;
+        }
+
+        function getMatchingKeyRange(x, qBox) {
+            let matchKeyFound = {state: false, key: ''};
+
+            Object.keys(qBox).forEach(key => {
+                let keyRange = key.split('-'); 
+                // console.log('key: ', key)
+                if ( (Number(x) > Number(keyRange[0])) || (Number(x) < Number(keyRange[1])) ) {
+                    // console.log(`${questionObject.start1.x}x is in ${keyRange} range`);
+                    matchKeyFound.state = true;
+                    matchKeyFound.key = key;
+                } /*else if ( questionObject.start2 && ((Number(questionObject.start2.x) > Number(keyRange[0])) || (Number(questionObject.start2.x) < Number(keyRange[1]))) ) {
+                    console.log(`${questionObject.start2.x}x is in ${keyRange} range`);
+                    matchKeyFound = true;
+                }*/ else {
+                    matchKeyFound.state = false;
+                    matchKeyFound.key = key;
+                }
+            });
+            return matchKeyFound;
+        }
+
+
+        document.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+        document.addEventListener('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            pages = [];
+            croppedPages = [];
+            dot = {};
+            parenthesis = {};
+            handleFile(e.dataTransfer.files[0])
+        });
+
+
+    </script>
+</body>
+</html>
